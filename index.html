@@ -218,8 +218,8 @@ textarea { resize: none; font-family: 'Zen Kaku Gothic New', sans-serif; font-si
       </div>
       <div class="form-row" style="margin-bottom:12px">
         <div class="form-group" style="margin-bottom:0">
-          <label>回数</label>
-          <input type="number" id="m-count" value="1" min="1">
+          <label>XM時間（HH:MM）</label>
+          <input type="text" id="m-time" placeholder="例: 03:30" maxlength="5">
         </div>
         <div class="form-group" style="margin-bottom:0">
           <label>方向</label>
@@ -263,6 +263,20 @@ function save() { localStorage.setItem(KEY, JSON.stringify(trades)); }
 function fmt(n) { return (n>0?'+':n<0?'-':'')+'¥'+Math.abs(Math.round(n)).toLocaleString('ja-JP'); }
 function fmtDate(ds) { return new Date(ds+'T00:00:00').toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'short'}); }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
+
+function toJST(xmTime) {
+  if (!xmTime || !xmTime.includes(':')) return '';
+  const [h, m] = xmTime.split(':').map(Number);
+  // XMは夏時間GMT+3、日本時間GMT+9なので+6時間
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  // 夏時間: 3月最終日曜〜11月第1日曜（GMT+3）、冬時間: GMT+2
+  const isSummer = month >= 3 && month <= 11;
+  const offset = isSummer ? 6 : 7;
+  let jh = h + offset;
+  if (jh >= 24) jh -= 24;
+  return String(jh).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+}
 
 function init() {
   const now = new Date();
@@ -357,7 +371,7 @@ function renderDay(){
     const imgs=(t.images||[]).map((src,i)=>`<img class="tc-thumb" src="${src}" onclick="openLightbox(${t.id},${i})" alt="">`).join('');
     return `<div class="trade-card ${t.pnl>=0?'win':'loss'}">
       <div class="trade-card-header">
-        <div><div class="tc-pair">${t.pair}${dir}</div><div class="tc-meta">${t.count}回</div></div>
+        <div><div class="tc-pair">${t.pair}${dir}</div><div class="tc-meta">${t.xmTime ? 'XM '+t.xmTime+' → JST '+toJST(t.xmTime) : ''}</div></div>
         <div class="trade-card-right">
           <div class="tc-pnl" style="color:${t.pnl>=0?'var(--win)':'var(--loss)'}">${fmt(t.pnl)}</div>
           <div class="tc-actions">
@@ -377,8 +391,8 @@ function openModal(id=null){
   document.getElementById('modal-title').textContent=id?'EDIT TRADE':'NEW TRADE';
   document.getElementById('img-preview').innerHTML='';
   document.getElementById('m-img').value='';
-  if(id){const t=trades.find(t=>t.id===id);if(!t)return;document.getElementById('m-pnl').value=t.pnl;document.getElementById('m-pair').value=t.pair;document.getElementById('m-count').value=t.count;document.getElementById('m-direction').value=t.direction||'';document.getElementById('m-memo').value=t.memo||'';pendingImages=[...(t.images||[])];renderPreviews();}
-  else{document.getElementById('m-pnl').value='';document.getElementById('m-pair').value='USD/JPY';document.getElementById('m-count').value='1';document.getElementById('m-direction').value='';document.getElementById('m-memo').value='';}
+  if(id){const t=trades.find(t=>t.id===id);if(!t)return;document.getElementById('m-pnl').value=t.pnl;document.getElementById('m-pair').value=t.pair;document.getElementById('m-time').value=t.xmTime||'';document.getElementById('m-direction').value=t.direction||'';document.getElementById('m-memo').value=t.memo||'';pendingImages=[...(t.images||[])];renderPreviews();}
+  else{document.getElementById('m-pnl').value='';document.getElementById('m-pair').value='USD/JPY';document.getElementById('m-time').value='';document.getElementById('m-direction').value='';document.getElementById('m-memo').value='';}
   document.getElementById('modal-overlay').classList.add('open');
 }
 
@@ -398,7 +412,7 @@ function removePending(i){pendingImages.splice(i,1);renderPreviews();}
 function saveTrade(){
   const pnl=parseFloat(document.getElementById('m-pnl').value);
   if(isNaN(pnl)){alert('損益を入力してください');return;}
-  const data={pnl,date:currentDate,pair:document.getElementById('m-pair').value,count:parseInt(document.getElementById('m-count').value)||1,direction:document.getElementById('m-direction').value,memo:document.getElementById('m-memo').value.trim(),images:[...pendingImages]};
+  const data={pnl,date:currentDate,pair:document.getElementById('m-pair').value,xmTime:document.getElementById('m-time').value.trim(),direction:document.getElementById('m-direction').value,memo:document.getElementById('m-memo').value.trim(),images:[...pendingImages]};
   if(editingId){const idx=trades.findIndex(t=>t.id===editingId);if(idx!==-1)trades[idx]={...trades[idx],...data};}
   else trades.push({id:Date.now(),...data});
   save();closeModal();renderDay();
