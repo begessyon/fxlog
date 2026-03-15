@@ -155,6 +155,18 @@ textarea { resize: none; font-family: 'Zen Kaku Gothic New', sans-serif; font-si
     <div class="cal-weekday">水</div><div class="cal-weekday">木</div><div class="cal-weekday">金</div><div class="cal-weekday">土</div>
   </div>
   <div class="cal-grid" id="cal-grid"></div>
+
+  <!-- ロット表示 -->
+  <div id="lot-display" style="margin:0 12px 16px;background:#111;border:1px solid #222;border-radius:12px;padding:16px 20px;display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <div style="font-size:0.6rem;color:#555;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">推奨ロット数</div>
+      <div id="lot-value" style="font-family:'DM Mono',monospace;font-size:2rem;font-weight:500;color:#00ff88">0.01</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:0.6rem;color:#555;letter-spacing:1px;margin-bottom:4px">次のロットアップまで</div>
+      <div id="lot-next" style="font-family:'DM Mono',monospace;font-size:0.85rem;color:#555">+¥4,000で0.02</div>
+    </div>
+  </div>
 </div>
 
 <!-- グラフ -->
@@ -264,6 +276,52 @@ function fmt(n) { return (n>0?'+':n<0?'-':'')+'¥'+Math.abs(Math.round(n)).toLoc
 function fmtDate(ds) { return new Date(ds+'T00:00:00').toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'short'}); }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
 
+function calcLot(total) {
+  // 累計がマイナスや4000未満は0.01
+  if (total < 4000) return 0.01;
+  // 4000から始まり倍々でロットも倍
+  // 4000→0.02, 8000→0.04, 16000→0.08, 32000→0.16, 64000→0.32...
+  let threshold = 4000;
+  let lot = 0.01;
+  while (total >= threshold) {
+    lot = Math.round(lot * 2 * 100) / 100;
+    threshold *= 2;
+  }
+  return lot;
+}
+
+function nextLotInfo(total) {
+  if (total < 4000) {
+    const need = 4000 - total;
+    return `+¥${need.toLocaleString('ja-JP')}で0.02`;
+  }
+  let threshold = 4000;
+  let lot = 0.01;
+  while (total >= threshold) {
+    lot = Math.round(lot * 2 * 100) / 100;
+    threshold *= 2;
+  }
+  const need = threshold - total;
+  const nextLot = Math.round(lot * 2 * 100) / 100;
+  return `+¥${need.toLocaleString('ja-JP')}で${nextLot}`;
+}
+
+function updateLot() {
+  const total = trades.reduce((s, t) => s + t.pnl, 0);
+  const lot = calcLot(total);
+  const lotEl = document.getElementById('lot-value');
+  const nextEl = document.getElementById('lot-next');
+  if (!lotEl) return;
+  lotEl.textContent = lot;
+  // ロット数に応じて色を変える
+  if (lot >= 0.16) lotEl.style.color = '#ff9900';
+  else if (lot >= 0.08) lotEl.style.color = '#ffcc00';
+  else if (lot >= 0.04) lotEl.style.color = '#00ccff';
+  else if (lot >= 0.02) lotEl.style.color = '#00ff88';
+  else lotEl.style.color = '#555';
+  nextEl.textContent = nextLotInfo(total);
+}
+
 function toJST(xmTime) {
   if (!xmTime || !xmTime.includes(':')) return '';
   const [h, m] = xmTime.split(':').map(Number);
@@ -295,6 +353,7 @@ function updateSummary() {
   const te=document.getElementById('total-pnl'); te.textContent=fmt(total); te.className='s-value '+(total>0?'pos':total<0?'neg':'neu');
   const me=document.getElementById('month-pnl'); me.textContent=fmt(month); me.className='s-value '+(month>0?'pos':month<0?'neg':'neu');
   document.getElementById('win-rate').textContent=rate!==null?rate+'%':'--%';
+  updateLot();
 }
 
 function renderCalendar() {
